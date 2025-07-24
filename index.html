@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo of the Day</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+            padding-bottom: 50px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        img {
+            max-width: 90%;
+            max-height: 70vh;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            background-color: #fff;
+        }
+        #timerDisplay {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #666;
+            font-family: monospace;
+            text-align: center;
+        }
+        #currentPhotoTitle {
+            font-size: 1.5em;
+            color: #444;
+            margin-top: 10px;
+            margin-bottom: 5px;
+        }
+
+        #previousPhotosSection {
+            margin-top: 40px;
+            width: 90%;
+            max-width: 1000px;
+            text-align: center;
+        }
+        #previousPhotosSection h2 {
+            color: #555;
+            margin-bottom: 20px;
+        }
+        #previousPhotosContainer {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+        }
+        .previous-photo-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 10px;
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        .previous-photo-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+        }
+        .previous-photo-item img {
+            width: 150px;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .previous-photo-item .date-label {
+            font-size: 0.9em;
+            color: #777;
+        }
+        #viewingStatus {
+            margin-top: 15px;
+            font-size: 1.1em;
+            color: #e65c00;
+            font-weight: bold;
+        }
+        #returnToCurrentBtn {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+        #returnToCurrentBtn:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>📸 Photo of the Day</h1>
+
+    <h2 id="currentPhotoTitle">Today's Photo</h2>
+    <img id="dailyImage" src="" alt="Photo of the day">
+    <div id="timerDisplay"></div>
+    <div id="viewingStatus" style="display: none;"></div>
+    <button id="returnToCurrentBtn" style="display: none;">Return to Today's Photo</button>
+
+    <div id="previousPhotosSection">
+        <h2>Previous Days' Photos</h2>
+        <div id="previousPhotosContainer">
+        </div>
+    </div>
+
+    <script>
+        const imageList = [
+             "1.JPG", "2.JPG", "3.JPG", "4.JPG", "5.JPG", "6.JPG", "7.JPG", "8.JPG",
+            "9.JPG", "10.JPG", "11.JPG", "12.JPG", "13.JPG", "14.JPG", "15.JPG",
+            "16.JPG", "17.JPG", "18.JPG", "19.JPG", "20.JPG", "21.JPG", "22.JPG",
+            "23.JPG", "24.JPG", "25.JPG", "26.JPG", "27.JPG", "28.JPG", "29.JPG",
+             "30.JPG", "31.JPG", "32.JPG", "33.JPG", "34.JPG", "35.JPG", "36.JPG",
+             "37.JPG", "38.JPG", "39.JPG", "40.JPG", "41.JPG", "42.JPG", "43.JPG",
+             "44.JPG"
+        ];
+
+        const timerDisplay = document.getElementById('timerDisplay');
+        const previousPhotosContainer = document.getElementById('previousPhotosContainer');
+        const dailyImageElement = document.getElementById('dailyImage');
+        const currentPhotoTitle = document.getElementById('currentPhotoTitle');
+        const viewingStatus = document.getElementById('viewingStatus');
+        const returnToCurrentBtn = document.getElementById('returnToCurrentBtn');
+
+        const CALENDAR_DAY_IN_MS = 86400000;
+        const SWITCH_INTERVAL_IN_MS = CALENDAR_DAY_IN_MS; 
+        // const SWITCH_INTERVAL_IN_MS = 5000;
+
+        const NUM_PREVIOUS_PHOTOS_TO_DISPLAY = 3;
+
+        let countdownIntervalId;
+        let nextSwitchTargetTimeMs;
+        let isViewingHistoricalPhoto = false;
+
+        function getDayOfYear(date) {
+            const startOfCurrentYear = new Date(date.getFullYear(), 0, 1);
+            const diff = date.getTime() - startOfCurrentYear.getTime();
+            const dayOfYear = Math.floor(diff / CALENDAR_DAY_IN_MS);
+            console.log(`[getDayOfYear] Date: ${date.toLocaleString()}, Start of Year: ${startOfCurrentYear.toLocaleString()}, Diff (ms): ${diff}, Day of Year (0-indexed): ${dayOfYear}`);
+            return dayOfYear;
+        }
+
+        function formatTime(ms) {
+            const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+
+            const pad = (num) => String(num).padStart(2, '0');
+            return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+        }
+
+        function updateImageDisplay() {
+            console.log("[updateImageDisplay] Function called: Determining current day's image.");
+            const today = new Date();
+            const dayIndex = getDayOfYear(today); 
+            
+            const imageArrayIndex = dayIndex % imageList.length;
+
+            const imageToShow = imageList[imageArrayIndex];
+            
+            // --- MODIFIED LINE HERE ---
+            dailyImageElement.src = imageToShow; 
+            currentPhotoTitle.textContent = "Today's Photo";
+
+            viewingStatus.style.display = 'none';
+            returnToCurrentBtn.style.display = 'none';
+            isViewingHistoricalPhoto = false;
+
+            console.log(`[updateImageDisplay] Current Date: ${today.toLocaleDateString()}, Calculated Day Index: ${dayIndex}, Image Array Index: ${imageArrayIndex}, Displaying: ${imageToShow}`);
+            
+            scheduleNextImageSwitchAndCountdown(); 
+        }
+
+        function scheduleNextImageSwitchAndCountdown() {
+            console.log("[scheduleNextImageSwitchAndCountdown] Function called: Scheduling next timer.");
+
+            const now = new Date();
+            let targetTimeMs;
+
+            if (SWITCH_INTERVAL_IN_MS === CALENDAR_DAY_IN_MS) {
+                const nextMidnight = new Date(now);
+                nextMidnight.setDate(now.getDate() + 1);
+                nextMidnight.setHours(0, 0, 0, 0);
+                targetTimeMs = nextMidnight.getTime();
+                console.log("[scheduleNextImageSwitchAndCountdown] Target is next midnight.");
+            } else {
+                targetTimeMs = now.getTime() + SWITCH_INTERVAL_IN_MS;
+                console.log("[scheduleNextImageSwitchAndCountdown] Target is short interval.");
+            }
+            
+            nextSwitchTargetTimeMs = targetTimeMs;
+
+            if (countdownIntervalId) {
+                clearInterval(countdownIntervalId);
+                console.log("[scheduleNextImageSwitchAndCountdown] Cleared previous interval.");
+            }
+
+            if (!isViewingHistoricalPhoto) {
+                countdownIntervalId = setInterval(() => {
+                    const currentTime = new Date().getTime();
+                    const remainingTimeMs = nextSwitchTargetTimeMs - currentTime;
+                    
+                    if (remainingTimeMs <= 0) {
+                        console.log("[setInterval] Time is up! Triggering image update.");
+                        timerDisplay.textContent = "Switching photo...";
+                        clearInterval(countdownIntervalId);
+                        
+                        updateImageDisplay(); 
+                    } else {
+                        timerDisplay.textContent = `Next image in: ${formatTime(remainingTimeMs)}`;
+                    }
+                }, 1000);
+                timerDisplay.style.display = 'block';
+            } else {
+                timerDisplay.style.display = 'none';
+            }
+
+            console.log(`[scheduleNextImageSwitchAndCountdown] Next switch targeted for: ${new Date(nextSwitchTargetTimeMs).toLocaleString()}`);
+        }
+
+        function displayPreviousPhotos() {
+            console.log("[displayPreviousPhotos] Function called: Populating previous photos.");
+            previousPhotosContainer.innerHTML = ''; 
+
+            const today = new Date();
+            const currentDayIndex = getDayOfYear(today); 
+
+            for (let i = 1; i <= NUM_PREVIOUS_PHOTOS_TO_DISPLAY; i++) {
+                const previousDate = new Date(today.getTime() - (CALENDAR_DAY_IN_MS * i));
+                const previousDayIndex = getDayOfYear(previousDate);
+
+                const imageArrayIndex = (previousDayIndex % imageList.length + imageList.length) % imageList.length;
+                const imageToShow = imageList[imageArrayIndex];
+                
+                // --- MODIFIED LINE HERE ---
+                const imagePath = imageToShow; 
+
+                const photoItem = document.createElement('div');
+                photoItem.className = 'previous-photo-item';
+                photoItem.dataset.imageSrc = imagePath;
+                photoItem.dataset.imageDate = previousDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+                const imgElement = document.createElement('img');
+                imgElement.src = imagePath;
+                imgElement.alt = `Photo from ${previousDate.toLocaleDateString()}`;
+
+                const dateLabel = document.createElement('div');
+                dateLabel.className = 'date-label';
+                dateLabel.textContent = previousDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                photoItem.appendChild(imgElement);
+                photoItem.appendChild(dateLabel);
+                previousPhotosContainer.appendChild(photoItem);
+
+                photoItem.addEventListener('click', function() {
+                    displayHistoricalPhoto(this.dataset.imageSrc, this.dataset.imageDate);
+                });
+
+                console.log(`[displayPreviousPhotos] Added photo for ${previousDate.toLocaleDateString()}: ${imageToShow}`);
+            }
+        }
+
+        function displayHistoricalPhoto(imgSrc, imageDate) {
+            dailyImageElement.src = imgSrc;
+            currentPhotoTitle.textContent = `Photo from ${imageDate}`;
+
+            if (countdownIntervalId) {
+                clearInterval(countdownIntervalId);
+            }
+            timerDisplay.style.display = 'none';
+            isViewingHistoricalPhoto = true;
+
+            viewingStatus.textContent = "You are viewing a historical photo.";
+            viewingStatus.style.display = 'block';
+            returnToCurrentBtn.style.display = 'block';
+
+            console.log(`[displayHistoricalPhoto] Viewing historical photo: ${imgSrc} from ${imageDate}`);
+        }
+
+        returnToCurrentBtn.addEventListener('click', function() {
+            console.log("[returnToCurrentBtn] Clicked. Returning to today's photo.");
+            updateImageDisplay();
+        });
+
+        window.onload = function() {
+            console.log("Page loaded. Initializing Photo of the Day.");
+            updateImageDisplay(); 
+            displayPreviousPhotos();
+        };
+    </script>
+
+</body>
+</html>
